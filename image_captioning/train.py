@@ -4,7 +4,7 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
 from utils import save_checkpoint, load_checkpoint, print_examples
-from get_loader import grt_loader
+from get_loader import get_loader
 from model import CNNtoRNN
 
 
@@ -12,7 +12,7 @@ def train():
     transform = transforms.Compose(
     [
         transforms.Resize((356,356)),
-        yransforms.RandomCrop((229,299)),
+        transforms.RandomCrop((299,299)),
         transforms.ToTensor(),
         transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5)),
     ]
@@ -20,12 +20,12 @@ def train():
     
     train_loader, dataset = get_loader(
         root_folder = "flickr8k/images",
-        annotation_file = "flick8k/captions.txt",
+        annotation_file = "flickr8k/captions.txt",
         transform = transform,
         num_workers = 2,
     )
     
-    torch.backends.Cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = True
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     load_model = False
     save_model = True
@@ -44,7 +44,9 @@ def train():
     step = 0
     
     #initialize model, loss etc
-    
+    if not torch.cuda.is_available() and not torch.backends.mps.is_available():
+        print('using CPU, this will be slow')
+        
     model = CNNtoRNN(embed_size, hidden_size, vocab_size, num_layers).to(device)
     criterion = nn.CrossEntropyLoss(ignore_index = dataset.vocab.stoi["<PAD>"])
     optimizer = optim.Adam(model.parameters(), lr = learning_rate)
@@ -69,7 +71,7 @@ def train():
             captions = captions.to(device)
             
             outputs = model(imgs, captions[:-1])
-            loss = criterion(outputs.reshape(-1, outputs.shape[2]), caption.reshape(-1))
+            loss = criterion(outputs.reshape(-1, outputs.shape[2]), captions.reshape(-1))
             
             writer.add_scalar("Training loss", loss.item(), global_step = step)
             step += 1
